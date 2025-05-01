@@ -1,14 +1,38 @@
 import streamlit as st
-from data_loader import verificar_usuario, adicionar_usuario  # supondo que existam
 import base64
+from data_loader import verificar_usuario, adicionar_usuario  # supondo que existam
 
-# --- Inicialização ---
+# --- Configuração da Página ---
+st.set_page_config(
+    page_title="Gestão de Indicadores",
+    layout="centered",  # use "wide" se quiser ocupar toda a largura no desktop
+    initial_sidebar_state="collapsed"  # esconde o menu lateral no celular
+)
+
+# --- Estilos Personalizados (CSS) ---
+st.markdown("""
+    <style>
+        input, button, .stTextInput > div > div > input {
+            font-size: 16px !important;
+        }
+        .stButton>button {
+            padding: 0.5em 1em;
+            font-size: 16px;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- Inicialização de Estado ---
 if "page" not in st.session_state:
     st.session_state.page = "homepage"
 if "username" not in st.session_state:
     st.session_state.username = None
 
-# --- Funções auxiliares ---
+# --- Funções Auxiliares ---
 def image_to_base64(path):
     with open(path, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode()
@@ -18,27 +42,21 @@ def logout():
     st.session_state.page = "homepage"
     st.rerun()
 
-# --- Homepage ---
+# --- Página Inicial ---
 def homepage():
-    st.title("Homepage")
-    col1, col2 = st.columns([1, 1.5])
+    st.title("Painel de Indicadores 📊")
+    st.markdown("#### Bem-vindo(a)! Acompanhe os principais indicadores da sua equipe.")
 
-    with col1:
-        st.markdown("#### Bem-vindo(a) ao painel de indicadores!")
-        if st.button("🚀 Acessar o Sistema"):
-            st.session_state.page = "login"
-            st.rerun()
+    st.image("imagens/Business Plan-cuate.png", width=300)
 
-    with col2:
-        image_base64 = image_to_base64("imagens/Business Plan-cuate.png")
-        st.markdown(
-            f"""<img src="data:image/png;base64,{image_base64}" style="width: 300px; border-radius: 10px;">""",
-            unsafe_allow_html=True
-        )
+    if st.button("🚀 Acessar o Sistema"):
+        st.session_state.page = "login"
+        st.rerun()
 
-# --- Página de login ---
+# --- Página de Login ---
 def login_page():
-    st.title("Login")
+    st.title("🔐 Login")
+
     with st.form("login_form"):
         nome_usuario = st.text_input("Usuário")
         senha = st.text_input("Senha", type="password")
@@ -58,12 +76,9 @@ def login_page():
         st.session_state.page = "cadastro"
         st.rerun()
 
-
-
-
-# --- Página de cadastro ---
+# --- Página de Cadastro ---
 def cadastro_usuario_page():
-    st.title("Cadastro de Novo Usuário")
+    st.title("📝 Cadastro de Novo Usuário")
 
     with st.form("cadastro_form"):
         nome = st.text_input("Novo usuário")
@@ -79,25 +94,25 @@ def cadastro_usuario_page():
             else:
                 st.warning("Preencha todos os campos.")
 
-# --- Página interna com menu lateral ---
+# --- Sistema com Sidebar ---
 def sistema():
-    st.sidebar.title(f"Bem-vindo, {st.session_state.username}")
+    st.sidebar.title(f"👤 Bem-vindo, {st.session_state.username}")
     page = st.sidebar.radio("Escolha a página:", [
         "Matriz de Polivalência", "Turnover", "Absenteísmo"
     ])
     st.sidebar.button("🔒 Logout", on_click=logout)
 
     if page == "Matriz de Polivalência":
-        import matriz_polivalencia  # Importa 'matriz_polivalencia.py'
+        import matriz_polivalencia
         matriz_polivalencia.main()
     elif page == "Turnover":
-        import turnover  # Importa 'turnover.py'
-        turnover.main()  # Certifique-se que 'main' está definido em 'turnover.py'
+        import turnover
+        turnover.main()
     elif page == "Absenteísmo":
-        import absenteismo  # Importa o arquivo 'absenteismo.py'
-        absenteismo.main()  # Certifique-se que a função 'main' existe em 'absenteismo.py'
+        import absenteismo
+        absenteismo.main()
 
-# --- Controle de navegação principal ---
+# --- Controle de Navegação ---
 if st.session_state.username:
     sistema()
 else:
@@ -107,6 +122,7 @@ else:
         login_page()
     elif st.session_state.page == "cadastro":
         cadastro_usuario_page()
+
 
 
 
