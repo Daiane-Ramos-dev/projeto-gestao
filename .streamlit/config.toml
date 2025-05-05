@@ -1,2 +1,5 @@
 [theme]
 base = "dark"
+
+[server]
+folderWatchBlacklist = ["imagens", "__pycache__"]

@@ -3,6 +3,7 @@ import pandas as pd
 import sqlite3
 import os
 import altair as alt
+import bcrypt
 from datetime import datetime
 
 # ========================= Funções de carregamento de Excel =========================
@@ -58,12 +59,14 @@ def criar_tabelas():
     )
     """)
 
-    # NOVA TABELA: Usuários
+    # Tabela de usuarios (corrigido para usar BLOB e adicionado o campo admin)
     c.execute("""
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT UNIQUE NOT NULL,
-        senha TEXT NOT NULL
+        senha BLOB NOT NULL,
+        admin INTEGER DEFAULT 0,  -- Adicionando a coluna admin
+        primeiro_login INTEGER DEFAULT 1
     )
     """)
 
@@ -174,127 +177,42 @@ def get_historico_habilidades(colaborador_id):
     return resultado
 
 # Adiciona um novo usuário
-def adicionar_usuario(nome, senha):
+def adicionar_usuario(nome, senha, admin=False):
     conn = conectar_db()
     c = conn.cursor()
     try:
-        c.execute("INSERT INTO usuarios (nome, senha) VALUES (?, ?)", (nome, senha))
+        senha_hash = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt())
+        c.execute("INSERT INTO usuarios (nome, senha, admin, primeiro_login) VALUES (?, ?, ?, ?)", 
+                  (nome, senha_hash, 1 if admin else 0, 1))
         conn.commit()
     except sqlite3.IntegrityError:
         st.error("Usuário já existe.")
     finally:
         conn.close()
 
-# Verifica login
-def verificar_usuario(nome, senha):
+# Função para verificar se o usuário é admin
+def is_usuario_admin(username):
+    conn = conectar_db()  # Conectar ao banco de dados
+    c = conn.cursor()
+    c.execute("SELECT admin FROM usuarios WHERE nome = ?", (username,))
+    resultado = c.fetchone()
+    conn.close()
+
+    if resultado:
+        # Se admin for 1, o usuário é admin
+        return resultado[0] == 1
+    return False
+
+# Função para verificar se o usuário existe e a senha está correta
+def verificar_usuario(nome_usuario, senha):
     conn = conectar_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM usuarios WHERE nome = ? AND senha = ?", (nome, senha))
+    c.execute("SELECT senha, primeiro_login FROM usuarios WHERE nome = ?", (nome_usuario,))
     usuario = c.fetchone()
     conn.close()
-    return usuario
 
-# ========================= Streamlit UI =========================
-def adicionar_funcao():
-    st.header("Adicionar Funções")
-    funcao = st.text_input("Nome da Função")
-    if st.button("Adicionar Função"):
-        if funcao:
-            adicionar_funcao_db(funcao)
-            st.success(f"Função '{funcao}' adicionada com sucesso!")
-        else:
-            st.warning("Digite o nome da função.")
+    if usuario and bcrypt.checkpw(senha.encode('utf-8'), usuario[0]):
+        return True, usuario[1]  # Retorna se o login foi bem-sucedido e se é o primeiro login
+    return False, None
 
-def adicionar_colaborador():
-    st.header("Adicionar/Atualizar Colaboradores e Habilidades")
 
-    colaboradores = get_colaboradores()
-
-    if colaboradores:
-        colaborador_selecionado = st.selectbox("Selecione um Colaborador para Atualizar ou Excluir",
-                                               options=[colaborador[1] for colaborador in colaboradores])
-
-        if colaborador_selecionado:
-            funcoes = get_funcoes()
-            habilidades = {}
-
-            for f in funcoes:
-                nivel_atual = next((nivel for colaborador_id, nome, funcao, nivel in colaboradores
-                                    if nome == colaborador_selecionado and funcao == f), None)
-                habilidades[f] = nivel_atual if nivel_atual is not None else 0
-
-            for f in funcoes:
-                habilidades[f] = st.selectbox(f"Nível em '{f}' (0-5)", options=[0, 1, 2, 3, 4, 5],
-                                              index=habilidades[f], key=f"{colaborador_selecionado}_{f}")
-
-            if st.button(f"Atualizar Colaborador '{colaborador_selecionado}'"):
-                colaborador_id = next((id for id, nome, *_ in colaboradores if nome == colaborador_selecionado), None)
-                if colaborador_id:
-                    atualizar_colaborador_db(colaborador_id, habilidades)
-                    st.success(f"Colaborador '{colaborador_selecionado}' atualizado com sucesso!")
-
-            if st.button(f"Excluir Colaborador '{colaborador_selecionado}'"):
-                colaborador_id = next((id for id, nome, *_ in colaboradores if nome == colaborador_selecionado), None)
-                if colaborador_id:
-                    excluir_colaborador_db(colaborador_id)
-                    st.success(f"Colaborador '{colaborador_selecionado}' excluído com sucesso!")
-    else:
-        st.warning("Nenhum colaborador encontrado. Adicione um colaborador primeiro.")
-
-    novo_colaborador = st.text_input("Nome do Novo Colaborador")
-
-    if novo_colaborador:
-        funcoes = get_funcoes()
-        habilidades = {}
-        for f in funcoes:
-            nivel = st.selectbox(f"Nível em '{f}' (0-5)", options=[0, 1, 2, 3, 4, 5], key=f"{novo_colaborador}_{f}")
-            habilidades[f] = nivel
-
-        if st.button("Adicionar Novo Colaborador"):
-            adicionar_colaborador_db(novo_colaborador, habilidades)
-            st.success(f"Colaborador '{novo_colaborador}' adicionado com sucesso!")
-
-def exibir_matriz():
-    colaboradores = get_colaboradores()
-
-    if colaboradores:
-        st.header("Matriz de Polivalência")
-
-        data = {"nome": [], "função": [], "nível": []}
-        for colaborador_id, nome, funcao, nivel in colaboradores:
-            data["nome"].append(nome)
-            data["função"].append(funcao)
-            data["nível"].append(nivel)
-
-        df = pd.DataFrame(data)
-        st.dataframe(df)
-
-        df_melted = df.melt(id_vars=["nome"], var_name="Função", value_name="Nível")
-
-        st.header("Gráfico por Função")
-        chart = alt.Chart(df_melted).mark_bar().encode(
-            x=alt.X("nome:N", title="Colaborador"),
-            y=alt.Y("Nível:Q", title="Nível de Habilidade"),
-            color="nome:N",
-            tooltip=["nome:N", "Função:N", "Nível:Q"]
-        ).properties(
-            width=200,
-            height=300
-        ).facet(
-            column="Função:N"
-        )
-        st.altair_chart(chart, use_container_width=True)
-
-    
-
-# ========================= Streamlit Principal =========================
-def main():
-    st.title("Matriz de Polivalência")
-    criar_tabelas()
-    remover_restricao_unique()
-    adicionar_funcao()
-    adicionar_colaborador()
-    exibir_matriz()
-
-if __name__ == "__main__":
-    main()

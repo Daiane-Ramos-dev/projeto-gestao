@@ -175,6 +175,8 @@ def main():
 
     st.altair_chart(combinado, use_container_width=True)
 
+    st.markdown("<br><hr>", unsafe_allow_html=True)
+
     st.subheader("👤 Evolução do Absenteísmo por Funcionário")
 
     # Criar nomes completos com NOME primeiro para ordenar alfabeticamente

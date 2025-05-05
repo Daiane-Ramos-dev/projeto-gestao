@@ -1,30 +1,13 @@
 import streamlit as st
-import base64
-from data_loader import verificar_usuario, adicionar_usuario  # supondo que existam
+from data_loader import is_usuario_admin
+from data_loader import verificar_usuario, adicionar_usuario  # Certifique-se que verificar_usuario retorna (bool, primeiro_login)
 
 # --- Configuração da Página ---
 st.set_page_config(
     page_title="Gestão de Indicadores",
-    layout="centered",  # use "wide" se quiser ocupar toda a largura no desktop
-    initial_sidebar_state="collapsed"  # esconde o menu lateral no celular
+    layout="centered",  # Use "wide" se quiser ocupar toda a largura no desktop
+    initial_sidebar_state="collapsed"  # Esconde o menu lateral no celular
 )
-
-# --- Estilos Personalizados (CSS) ---
-st.markdown("""
-    <style>
-        input, button, .stTextInput > div > div > input {
-            font-size: 16px !important;
-        }
-        .stButton>button {
-            padding: 0.5em 1em;
-            font-size: 16px;
-        }
-        img {
-            max-width: 100%;
-            height: auto;
-        }
-    </style>
-""", unsafe_allow_html=True)
 
 # --- Inicialização de Estado ---
 if "page" not in st.session_state:
@@ -33,10 +16,6 @@ if "username" not in st.session_state:
     st.session_state.username = None
 
 # --- Funções Auxiliares ---
-def image_to_base64(path):
-    with open(path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode()
-
 def logout():
     st.session_state.username = None
     st.session_state.page = "homepage"
@@ -45,8 +24,7 @@ def logout():
 # --- Página Inicial ---
 def homepage():
     st.title("Painel de Indicadores 📊")
-    st.markdown("#### Bem-vindo(a)! Acompanhe os principais indicadores da sua equipe.")
-
+    st.markdown("#### Acompanhe os principais indicadores da sua equipe.")
     st.image("imagens/Business Plan-cuate.png", width=300)
 
     if st.button("🚀 Acessar o Sistema"):
@@ -63,18 +41,27 @@ def login_page():
         submit = st.form_submit_button("Entrar")
 
         if submit:
-            usuario = verificar_usuario(nome_usuario, senha)
-            if usuario:
+            sucesso, primeiro_login = verificar_usuario(nome_usuario, senha)
+            if sucesso:
                 st.session_state.username = nome_usuario
-                st.session_state.page = "matriz_polivalencia"
+                if primeiro_login == 1:
+                    st.session_state.page = "trocar_senha"
+                else:
+                    st.session_state.page = "matriz_polivalencia"
                 st.success("Login realizado com sucesso!")
                 st.rerun()
             else:
                 st.error("Usuário ou senha incorretos.")
 
-    if st.button("📋 Não tem conta? Cadastre-se aqui"):
-        st.session_state.page = "cadastro"
-        st.rerun()
+    if "username" in st.session_state:
+        if is_usuario_admin(st.session_state.username):
+            if st.button("📋 Gerenciar Usuários (Cadastro)"):
+                st.session_state.page = "cadastro"
+                st.rerun()
+        else:
+            st.warning("Você não tem permissão para cadastrar usuários.")
+    else:
+        st.warning("Por favor, faça login primeiro.")
 
 # --- Página de Cadastro ---
 def cadastro_usuario_page():
@@ -83,16 +70,22 @@ def cadastro_usuario_page():
     with st.form("cadastro_form"):
         nome = st.text_input("Novo usuário")
         senha = st.text_input("Senha", type="password")
+        confirmar_senha = st.text_input("Confirme a senha", type="password")
         cadastrar = st.form_submit_button("Cadastrar")
 
         if cadastrar:
-            if nome and senha:
-                adicionar_usuario(nome, senha)
-                st.success("Usuário cadastrado com sucesso!")
-                st.session_state.page = "login"
-                st.rerun()
-            else:
+            if not nome or not senha or not confirmar_senha:
                 st.warning("Preencha todos os campos.")
+            elif senha != confirmar_senha:
+                st.warning("As senhas não coincidem. Tente novamente.")
+            else:
+                try:
+                    adicionar_usuario(nome, senha)  # Adicionando usuário
+                    st.success("Usuário cadastrado com sucesso!")
+                    st.session_state.page = "login"
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao cadastrar o usuário: {e}")
 
 # --- Sistema com Sidebar ---
 def sistema():
@@ -100,7 +93,9 @@ def sistema():
     page = st.sidebar.radio("Escolha a página:", [
         "Matriz de Polivalência", "Turnover", "Absenteísmo"
     ])
-    st.sidebar.button("🔒 Logout", on_click=logout)
+    if st.sidebar.button("🔒 Logout"):
+        logout()
+        st.rerun()
 
     if page == "Matriz de Polivalência":
         import matriz_polivalencia
@@ -122,6 +117,7 @@ else:
         login_page()
     elif st.session_state.page == "cadastro":
         cadastro_usuario_page()
+
 
 
 
