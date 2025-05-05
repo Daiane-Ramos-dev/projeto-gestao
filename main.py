@@ -58,7 +58,7 @@ def login_page():
             if st.button("📋 Gerenciar Usuários (Cadastro)"):
                 st.session_state.page = "cadastro"
                 st.rerun()
-        else:
+        #else:
             st.warning("Você não tem permissão para cadastrar usuários.")
     else:
         st.warning("Por favor, faça login primeiro.")
